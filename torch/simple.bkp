@@ -1,0 +1,162 @@
+unit torch-indef where
+    signature Tensor where
+        import Data.Int
+        data Tensor
+        data AccReal
+        instance Show AccReal
+        instance Num AccReal
+        read1dFile :: FilePath -> Int64 -> IO Tensor
+        dot :: Tensor -> Tensor -> IO AccReal
+        sumall :: Tensor -> IO AccReal
+    module App where
+	import Tensor
+	app = do
+	    x <- read1dFile "x" 10
+	    y <- read1dFile "y" 10
+	    d <- dot x y
+	    s <- sumall x
+	    print (d + s)
+	    return ()
+                
+
+unit float-tensor where
+    module Tensor where
+        import Foreign
+        import Foreign.C.Types
+        import Foreign.C.String
+        import Foreign.ForeignPtr
+
+	type CTHFile = ()
+
+	foreign import ccall "THDiskFile.h THDiskFile_new"
+	    c_THDiskFile_new :: CString -> CString -> CInt -> IO (Ptr CTHFile)
+
+	type CTHFloatTensor = ()
+
+	foreign import ccall "THTensor.h THFloatTensor_newWithSize1d"
+	    c_THFloatTensor_newWithSize1d :: CLong -> IO (Ptr CTHFloatTensor)
+
+	type CTHFloatStorage = ()
+
+	foreign import ccall "THFile.h THFile_readFloat"
+	    c_THFile_readFloat :: (Ptr CTHFile) -> (Ptr CTHFloatStorage) -> IO CSize
+
+	foreign import ccall "THTensorMath.h THFloatTensor_dot"
+	    c_THFloatTensor_dot :: (Ptr CTHFloatTensor) -> (Ptr CTHFloatTensor) -> IO CDouble
+
+	foreign import ccall "THTensorMath.h THFloatTensor_sumall"
+	    c_THFloatTensor_sumall :: (Ptr CTHFloatTensor) -> IO CDouble
+
+	foreign import ccall "THTensor.h THFloatTensor_free"
+	    c_THFloatTensor_free :: (Ptr CTHFloatTensor) -> IO ()
+
+	foreign import ccall "THTensor.h &THFloatTensor_free"
+	    p_THFloatTensor_free :: FunPtr ((Ptr CTHFloatTensor) -> IO ())
+
+	foreign import ccall "THFile.h THFile_free"
+	    c_THFile_free :: (Ptr CTHFile) -> IO CSize
+
+	foreign import ccall "THTensor.h THFloatTensor_storage"
+	    c_THFloatTensor_storage :: (Ptr CTHFloatTensor) -> IO (Ptr CTHFloatStorage)
+
+	data FloatTensor = FT (ForeignPtr CTHFloatTensor)
+
+        type Tensor = FloatTensor
+        type AccReal = Double
+
+
+	read1dFile :: FilePath -> Int64 -> IO Tensor
+	read1dFile f n = withCString f $ \x ->
+			 withCString "r" $ \r -> do
+			 xfile <- c_THDiskFile_new x r 0
+			 t <- c_THFloatTensor_newWithSize1d $ fromIntegral n
+			 ft <- newForeignPtr p_THFloatTensor_free t
+			 storaget <- withForeignPtr ft c_THFloatTensor_storage
+			 c_THFile_readFloat xfile storaget
+			 c_THFile_free xfile
+			 return (FT ft)
+
+	dot :: Tensor -> Tensor -> IO AccReal
+	dot (FT f) (FT g) = withForeignPtr f $ \x ->
+			    withForeignPtr g $ \y -> do
+			    d <- c_THFloatTensor_dot x y
+			    return (realToFrac d)
+
+	sumall :: Tensor -> IO AccReal
+	sumall (FT f) = withForeignPtr f $ \x -> do
+			d <- c_THFloatTensor_sumall x
+			return (realToFrac d)
+                        
+unit int-tensor where
+    module Tensor where
+        import Foreign
+        import Foreign.C.Types
+        import Foreign.C.String
+        import Foreign.ForeignPtr
+
+	type CTHFile = ()
+
+	foreign import ccall "THDiskFile.h THDiskFile_new"
+	    c_THDiskFile_new :: CString -> CString -> CInt -> IO (Ptr CTHFile)
+
+	type CTHIntTensor = ()
+
+	foreign import ccall "THTensor.h THIntTensor_newWithSize1d"
+	    c_THIntTensor_newWithSize1d :: CLong -> IO (Ptr CTHIntTensor)
+
+	type CTHIntStorage = ()
+
+	foreign import ccall "THFile.h THFile_readInt"
+	    c_THFile_readInt :: (Ptr CTHFile) -> (Ptr CTHIntStorage) -> IO CSize
+
+	foreign import ccall "THTensorMath.h THIntTensor_dot"
+	    c_THIntTensor_dot :: (Ptr CTHIntTensor) -> (Ptr CTHIntTensor) -> IO CInt
+
+	foreign import ccall "THTensorMath.h THIntTensor_sumall"
+	    c_THIntTensor_sumall :: (Ptr CTHIntTensor) -> IO CInt
+
+	foreign import ccall "THTensor.h THIntTensor_free"
+	    c_THIntTensor_free :: (Ptr CTHIntTensor) -> IO ()
+
+	foreign import ccall "THTensor.h &THIntTensor_free"
+	    p_THIntTensor_free :: FunPtr ((Ptr CTHIntTensor) -> IO ())
+
+	foreign import ccall "THFile.h THFile_free"
+	    c_THFile_free :: (Ptr CTHFile) -> IO CSize
+
+	foreign import ccall "THTensor.h THIntTensor_storage"
+	    c_THIntTensor_storage :: (Ptr CTHIntTensor) -> IO (Ptr CTHIntStorage)
+
+	data IntTensor = FT (ForeignPtr CTHIntTensor)
+
+        type Tensor = IntTensor
+        type AccReal = Int
+
+	read1dFile :: FilePath -> Int64 -> IO Tensor
+	read1dFile f n = withCString f $ \x ->
+			 withCString "r" $ \r -> do
+			 xfile <- c_THDiskFile_new x r 0
+			 t <- c_THIntTensor_newWithSize1d $ fromIntegral n
+			 ft <- newForeignPtr p_THIntTensor_free t
+			 storaget <- withForeignPtr ft c_THIntTensor_storage
+			 c_THFile_readInt xfile storaget
+			 c_THFile_free xfile
+			 return (FT ft)
+
+	dot :: Tensor -> Tensor -> IO AccReal
+	dot (FT f) (FT g) = withForeignPtr f $ \x ->
+			    withForeignPtr g $ \y -> do
+			    d <- c_THIntTensor_dot x y
+			    return (fromIntegral d)
+
+	sumall :: Tensor -> IO AccReal
+	sumall (FT f) = withForeignPtr f $ \x -> do
+			d <- c_THIntTensor_sumall x
+			return (fromIntegral d)
+
+unit main where
+    dependency torch-indef[Tensor=int-tensor:Tensor]
+    module Main where
+	import App
+	main = app
+                
